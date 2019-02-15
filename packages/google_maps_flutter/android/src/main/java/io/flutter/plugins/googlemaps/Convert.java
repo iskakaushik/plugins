@@ -22,7 +22,6 @@ import java.util.Set;
 
 /** Conversions between JSON-like values and GoogleMaps data types. */
 class Convert {
-
   private static BitmapDescriptor toBitmapDescriptor(Object o) {
     final List<?> data = toList(o);
     switch (toString(data.get(0))) {

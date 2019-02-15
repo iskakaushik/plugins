@@ -9,7 +9,6 @@ part of google_maps_flutter;
 /// Change listeners are notified upon changes to any of
 ///
 /// * the [options] property
-/// * the collection of [LegacyMarker]s added to this map
 /// * the [isCameraMoving] property
 /// * the [cameraPosition] property
 ///
@@ -115,8 +114,8 @@ class GoogleMapController extends ChangeNotifier {
 
 /// Manages lifecycle of [MarkerController] for all [Marker]s.
 ///
-/// When a marker gets added
-class MarkerControllers {
+/// Change listeners are notified upon changes to any of the markers.
+class MarkerControllers extends ChangeNotifier {
   MarkerControllers();
 
   final Map<MarkerId, MarkerController> _markerControllers =
@@ -142,6 +141,7 @@ class MarkerControllers {
           throw Exception("Unknown markerUpdate type.");
       }
     });
+    notifyListeners();
   }
 }
 
