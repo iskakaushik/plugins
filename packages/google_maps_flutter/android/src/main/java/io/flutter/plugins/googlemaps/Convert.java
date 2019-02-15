@@ -15,11 +15,14 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import io.flutter.view.FlutterMain;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Conversions between JSON-like values and GoogleMaps data types. */
 class Convert {
+
   private static BitmapDescriptor toBitmapDescriptor(Object o) {
     final List<?> data = toList(o);
     switch (toString(data.get(0))) {
@@ -121,7 +124,7 @@ class Convert {
     return Arrays.asList(latLng.latitude, latLng.longitude);
   }
 
-  private static LatLng toLatLng(Object o) {
+  public static LatLng toLatLng(Object o) {
     final List<?> data = toList(o);
     return new LatLng(toDouble(data.get(0)), toDouble(data.get(1)));
   }
@@ -209,6 +212,14 @@ class Convert {
     if (myLocationEnabled != null) {
       sink.setMyLocationEnabled(toBoolean(myLocationEnabled));
     }
+    List<?> markerUpdatesRaw = (List<?>) data.get("markerUpdates");
+    if (markerUpdatesRaw != null) {
+      Set<MarkerUpdate> markerUpdates = new HashSet<>(markerUpdatesRaw.size());
+      for (Object update : markerUpdatesRaw) {
+        markerUpdates.add(MarkerUpdate.from(update));
+      }
+      sink.updateMarkers(markerUpdates);
+    }
   }
 
   static void interpretMarkerOptions(Object o, MarkerOptionsSink sink) {
@@ -238,15 +249,10 @@ class Convert {
     if (icon != null) {
       sink.setIcon(toBitmapDescriptor(icon));
     }
-    final Object infoWindowAnchor = data.get("infoWindowAnchor");
-    if (infoWindowAnchor != null) {
-      final List<?> anchorData = toList(infoWindowAnchor);
-      sink.setInfoWindowAnchor(toFloat(anchorData.get(0)), toFloat(anchorData.get(1)));
-    }
-    final Object infoWindowText = data.get("infoWindowText");
-    if (infoWindowText != null) {
-      final List<?> textData = toList(infoWindowText);
-      sink.setInfoWindowText(toString(textData.get(0)), toString(textData.get(1)));
+
+    final Object infoWindow = data.get("infoWindow");
+    if (infoWindow != null) {
+      interpretInfoWindowOptions(sink, (Map<String, Object>) infoWindow);
     }
     final Object position = data.get("position");
     if (position != null) {
@@ -263,6 +269,21 @@ class Convert {
     final Object zIndex = data.get("zIndex");
     if (zIndex != null) {
       sink.setZIndex(toFloat(zIndex));
+    }
+  }
+
+  private static void interpretInfoWindowOptions(
+      MarkerOptionsSink sink, Map<String, Object> infoWindow) {
+    String title = (String) infoWindow.get("title");
+    String snippet = (String) infoWindow.get("snippet");
+    // snippet is nullable.
+    if (title != null) {
+      sink.setInfoWindowText(title, snippet);
+    }
+    Object infoWindowAnchor = infoWindow.get("anchor");
+    if (infoWindowAnchor != null) {
+      final List<?> anchorData = toList(infoWindowAnchor);
+      sink.setInfoWindowAnchor(toFloat(anchorData.get(0)), toFloat(anchorData.get(1)));
     }
   }
 }

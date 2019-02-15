@@ -12,6 +12,7 @@ import static io.flutter.plugins.googlemaps.GoogleMapsPlugin.STARTED;
 import static io.flutter.plugins.googlemaps.GoogleMapsPlugin.STOPPED;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
@@ -35,6 +36,7 @@ import io.flutter.plugin.platform.PlatformView;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Controller of a single GoogleMaps MapView instance. */
@@ -48,15 +50,14 @@ final class GoogleMapController
         GoogleMapOptionsSink,
         MethodChannel.MethodCallHandler,
         OnMapReadyCallback,
-        OnMarkerTappedListener,
         PlatformView {
+
   private static final String TAG = "GoogleMapController";
   private final int id;
   private final AtomicInteger activityState;
   private final MethodChannel methodChannel;
   private final PluginRegistry.Registrar registrar;
   private final MapView mapView;
-  private final Map<String, MarkerController> markers;
   private GoogleMap googleMap;
   private boolean trackCameraPosition = false;
   private boolean myLocationEnabled = false;
@@ -65,6 +66,8 @@ final class GoogleMapController
   private MethodChannel.Result mapReadyResult;
   private final int registrarActivityHashCode;
   private final Context context;
+  private final Map<MarkerId, MarkerController> markerIdToController;
+  private final Map<String, MarkerId> googleMapsMarkerIdToDartMarkerId;
 
   GoogleMapController(
       int id,
@@ -77,12 +80,13 @@ final class GoogleMapController
     this.activityState = activityState;
     this.registrar = registrar;
     this.mapView = new MapView(context, options);
-    this.markers = new HashMap<>();
     this.density = context.getResources().getDisplayMetrics().density;
     methodChannel =
         new MethodChannel(registrar.messenger(), "plugins.flutter.io/google_maps_" + id);
     methodChannel.setMethodCallHandler(this);
     this.registrarActivityHashCode = registrar.activity().hashCode();
+    this.markerIdToController = new HashMap<>();
+    this.googleMapsMarkerIdToDartMarkerId = new HashMap<>();
   }
 
   @Override
@@ -140,29 +144,22 @@ final class GoogleMapController
     return trackCameraPosition ? googleMap.getCameraPosition() : null;
   }
 
-  private MarkerBuilder newMarkerBuilder() {
-    return new MarkerBuilder(this);
-  }
-
-  Marker addMarker(MarkerOptions markerOptions, boolean consumesTapEvents) {
+  private void addMarker(
+      MarkerId markerId, MarkerOptions markerOptions, boolean consumesTapEvents) {
     final Marker marker = googleMap.addMarker(markerOptions);
-    markers.put(marker.getId(), new MarkerController(marker, consumesTapEvents, this));
-    return marker;
+    MarkerController controller =
+        new MarkerController(marker, consumesTapEvents, registrar, markerId);
+    markerIdToController.put(markerId, controller);
+    googleMapsMarkerIdToDartMarkerId.put(marker.getId(), markerId);
   }
 
-  private void removeMarker(String markerId) {
-    final MarkerController markerController = markers.remove(markerId);
+  private void removeMarker(MarkerId markerId) {
+    final MarkerController markerController = markerIdToController.remove(markerId);
     if (markerController != null) {
       markerController.remove();
+      markerController.dispose();
+      googleMapsMarkerIdToDartMarkerId.remove(markerController.getGoogleMapsMarkerId());
     }
-  }
-
-  private MarkerController marker(String markerId) {
-    final MarkerController marker = markers.get(markerId);
-    if (marker == null) {
-      throw new IllegalArgumentException("Unknown marker: " + markerId);
-    }
-    return marker;
   }
 
   @Override
@@ -212,29 +209,6 @@ final class GoogleMapController
           result.success(null);
           break;
         }
-      case "marker#add":
-        {
-          final MarkerBuilder markerBuilder = newMarkerBuilder();
-          Convert.interpretMarkerOptions(call.argument("options"), markerBuilder);
-          final String markerId = markerBuilder.build();
-          result.success(markerId);
-          break;
-        }
-      case "marker#remove":
-        {
-          final String markerId = call.argument("marker");
-          removeMarker(markerId);
-          result.success(null);
-          break;
-        }
-      case "marker#update":
-        {
-          final String markerId = call.argument("marker");
-          final MarkerController marker = marker(markerId);
-          Convert.interpretMarkerOptions(call.argument("options"), marker);
-          result.success(null);
-          break;
-        }
       default:
         result.notImplemented();
     }
@@ -250,9 +224,11 @@ final class GoogleMapController
 
   @Override
   public void onInfoWindowClick(Marker marker) {
-    final Map<String, Object> arguments = new HashMap<>(2);
-    arguments.put("marker", marker.getId());
-    methodChannel.invokeMethod("infoWindow#onTap", arguments);
+    MarkerController controller = getController(marker.getId());
+    if (controller == null) {
+      return;
+    }
+    controller.onInfoWindowTap();
   }
 
   @Override
@@ -271,16 +247,12 @@ final class GoogleMapController
   }
 
   @Override
-  public void onMarkerTapped(Marker marker) {
-    final Map<String, Object> arguments = new HashMap<>(2);
-    arguments.put("marker", marker.getId());
-    methodChannel.invokeMethod("marker#onTap", arguments);
-  }
-
-  @Override
   public boolean onMarkerClick(Marker marker) {
-    final MarkerController markerController = markers.get(marker.getId());
-    return (markerController != null && markerController.onTap());
+    MarkerController controller = getController(marker.getId());
+    if (controller == null) {
+      return false;
+    }
+    return controller.onMarkerTap();
   }
 
   @Override
@@ -289,6 +261,9 @@ final class GoogleMapController
       return;
     }
     disposed = true;
+    for (MarkerController controller : markerIdToController.values()) {
+      controller.dispose();
+    }
     methodChannel.setMethodCallHandler(null);
     mapView.onDestroy();
     registrar.activity().getApplication().unregisterActivityLifecycleCallbacks(this);
@@ -414,6 +389,28 @@ final class GoogleMapController
     }
   }
 
+  @Override
+  public void updateMarkers(Set<MarkerUpdate> markerUpdates) {
+    for (MarkerUpdate update : markerUpdates) {
+      MarkerId markerId = update.getMarkerId();
+      switch (update.getUpdateEventType()) {
+        case ADD:
+          addMarker(update, markerId);
+          break;
+        case REMOVE:
+          removeMarker(markerId);
+          break;
+        case UPDATE:
+          MarkerController markerController = markerIdToController.get(markerId);
+          if (markerController != null) {
+            update.sinkChanges(markerController);
+          }
+          break;
+      }
+    }
+  }
+
+  @SuppressLint("MissingPermission")
   private void updateMyLocationEnabled() {
     if (hasLocationPermission()) {
       googleMap.setMyLocationEnabled(myLocationEnabled);
@@ -422,6 +419,21 @@ final class GoogleMapController
       // https://github.com/flutter/flutter/issues/24327
       Log.e(TAG, "Cannot enable MyLocation layer as location permissions are not granted");
     }
+  }
+
+  private MarkerController getController(String googleMapsMarkerId) {
+    MarkerId markerId = googleMapsMarkerIdToDartMarkerId.get(googleMapsMarkerId);
+    if (markerId == null) {
+      return null;
+    }
+    return markerIdToController.get(markerId);
+  }
+
+  private void addMarker(MarkerUpdate update, MarkerId markerId) {
+    MarkerBuilder markerBuilder = new MarkerBuilder();
+    update.sinkChanges(markerBuilder);
+    MarkerOptions options = markerBuilder.build();
+    addMarker(markerId, options, markerBuilder.consumesTapEvents());
   }
 
   private boolean hasLocationPermission() {

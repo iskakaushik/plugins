@@ -7,25 +7,28 @@ package io.flutter.plugins.googlemaps;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
+import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.PluginRegistry;
 
 /** Controller of a single Marker on the map. */
 class MarkerController implements MarkerOptionsSink {
+
   private final Marker marker;
-  private final OnMarkerTappedListener onTappedListener;
+  private final String googleMapsMarkerId;
+  private final MethodChannel methodChannel;
   private boolean consumeTapEvents;
 
   MarkerController(
-      Marker marker, boolean consumeTapEvents, OnMarkerTappedListener onTappedListener) {
+      Marker marker,
+      boolean consumeTapEvents,
+      PluginRegistry.Registrar registrar,
+      MarkerId markerId) {
     this.marker = marker;
     this.consumeTapEvents = consumeTapEvents;
-    this.onTappedListener = onTappedListener;
-  }
-
-  boolean onTap() {
-    if (onTappedListener != null) {
-      onTappedListener.onMarkerTapped(marker);
-    }
-    return consumeTapEvents;
+    this.googleMapsMarkerId = marker.getId();
+    methodChannel =
+        new MethodChannel(
+            registrar.messenger(), "plugins.flutter.io/google_maps_markers_" + markerId.getValue());
   }
 
   void remove() {
@@ -91,5 +94,22 @@ class MarkerController implements MarkerOptionsSink {
   @Override
   public void setZIndex(float zIndex) {
     marker.setZIndex(zIndex);
+  }
+
+  String getGoogleMapsMarkerId() {
+    return googleMapsMarkerId;
+  }
+
+  boolean onMarkerTap() {
+    methodChannel.invokeMethod("marker#onTap", null);
+    return consumeTapEvents;
+  }
+
+  void onInfoWindowTap() {
+    methodChannel.invokeMethod("infoWindow#onTap", null);
+  }
+
+  void dispose() {
+    methodChannel.setMethodCallHandler(null);
   }
 }
