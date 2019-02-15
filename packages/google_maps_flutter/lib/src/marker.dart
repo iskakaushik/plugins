@@ -45,10 +45,7 @@ class InfoWindow {
   final VoidCallback onTap;
 
   /// Creates a new [InfoWindow] object whose values are the same as this instance,
-  /// unless overwritten by the specified [changes].
-  ///
-  /// Returns this instance, if [changes] is null.
-  /// todo(docs)
+  /// unless overwritten by the specified parameters.
   InfoWindow copyWith({
     String titleParam,
     String snippetParam,
@@ -181,10 +178,7 @@ class Marker {
   final VoidCallback onTap;
 
   /// Creates a new [Marker] object whose values are the same as this instance,
-  /// unless overwritten by the specified [changes].
-  ///
-  /// Returns this instance, if [changes] is null.
-  /// todo (docs mere)
+  /// unless overwritten by the specified parameters.
   Marker copyWith({
     double alphaParam,
     Offset anchorParam,
@@ -225,7 +219,7 @@ class Marker {
       }
     }
 
-    addIfPresent('markerId', markerId?.hashCode);
+    addIfPresent('markerId', markerId.value);
     addIfPresent('alpha', alpha);
     addIfPresent('anchor', _offsetToJson(anchor));
     addIfPresent('consumeTapEvents', consumeTapEvents);
