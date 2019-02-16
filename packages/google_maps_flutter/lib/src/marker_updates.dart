@@ -27,8 +27,10 @@ Map<MarkerId, Marker> _toMap(Set<Marker> markers) {
 /// [Marker] update events to be applied to the [GoogleMap].
 ///
 /// Used in [GoogleMapController] when the map is updated.
+@immutable
 class MarkerUpdates {
-  MarkerUpdates._({
+  @visibleForTesting
+  MarkerUpdates.internal({
     @required this.markerUpdates,
   }) : assert(markerUpdates != null);
 
@@ -68,7 +70,7 @@ class MarkerUpdates {
       },
     ).toSet();
 
-    return MarkerUpdates._(markerUpdates: markerUpdates);
+    return MarkerUpdates.internal(markerUpdates: markerUpdates);
   }
 
   final Set<MarkerUpdate> markerUpdates;
@@ -78,11 +80,28 @@ class MarkerUpdates {
         .map<dynamic>((MarkerUpdate update) => update._toMap())
         .toList();
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MarkerUpdates &&
+          runtimeType == other.runtimeType &&
+          markerUpdates == other.markerUpdates;
+
+  @override
+  int get hashCode => markerUpdates.hashCode;
+
+  @override
+  String toString() {
+    return 'MarkerUpdates{markerUpdates: $markerUpdates}';
+  }
 }
 
 /// [Marker] update event with the changes.
+@immutable
 class MarkerUpdate {
-  MarkerUpdate._({
+  @visibleForTesting
+  MarkerUpdate.internal({
     @required this.updateEventType,
     @required this.markerId,
     this.changes,
@@ -92,14 +111,14 @@ class MarkerUpdate {
         assert(markerId.value != null);
 
   factory MarkerUpdate._remove(MarkerId markerId) {
-    return MarkerUpdate._(
+    return MarkerUpdate.internal(
       updateEventType: MarkerUpdateEventType.remove,
       markerId: markerId,
     );
   }
 
   factory MarkerUpdate._add(Marker newMarker) {
-    return MarkerUpdate._(
+    return MarkerUpdate.internal(
       updateEventType: MarkerUpdateEventType.add,
       markerId: newMarker.markerId,
       changes: newMarker,
@@ -113,7 +132,7 @@ class MarkerUpdate {
     @required Marker newMarker,
   }) {
     assert(oldMarker.markerId == newMarker.markerId);
-    return MarkerUpdate._(
+    return MarkerUpdate.internal(
       updateEventType: MarkerUpdateEventType.update,
       markerId: newMarker.markerId,
       changes: newMarker,
@@ -140,5 +159,28 @@ class MarkerUpdate {
     addIfNonNull('changes', changes?._toJson());
 
     return updateMap;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MarkerUpdate &&
+          runtimeType == other.runtimeType &&
+          updateEventType == other.updateEventType &&
+          markerId == other.markerId &&
+          changes == other.changes &&
+          newMarker == other.newMarker;
+
+  @override
+  int get hashCode =>
+      updateEventType.hashCode ^
+      markerId.hashCode ^
+      changes.hashCode ^
+      newMarker.hashCode;
+
+  @override
+  String toString() {
+    return 'MarkerUpdate{updateEventType: $updateEventType, markerId: $markerId, '
+        'changes: $changes, newMarker: $newMarker}';
   }
 }

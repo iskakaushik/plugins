@@ -75,22 +75,56 @@ class InfoWindow {
 
     return json;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is InfoWindow &&
+          runtimeType == other.runtimeType &&
+          title == other.title &&
+          snippet == other.snippet &&
+          anchor == other.anchor;
+
+  @override
+  int get hashCode => title.hashCode ^ snippet.hashCode ^ anchor.hashCode;
+
+  @override
+  String toString() {
+    return 'InfoWindow{title: $title, snippet: $snippet, anchor: $anchor}';
+  }
 }
 
 /// Uniquely identifies a [Marker] among [GoogleMap] markers.
 ///
 /// This does not have to be globally unique, only unique among the list.
+@immutable
 class MarkerId {
   MarkerId(this.value) : assert(value != null);
 
   /// value of the [MarkerId].
   final String value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MarkerId &&
+          runtimeType == other.runtimeType &&
+          value == other.value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() {
+    return 'MarkerId{value: $value}';
+  }
 }
 
 /// An icon placed at a particular geographical location on the map's surface.
 /// A marker icon is drawn oriented against the device's screen rather than the
 /// map's surface; that is, it will not necessarily change orientation due to
 /// map rotations, tilting, or zooming.
+@immutable
 class Marker {
   /// Creates a set of marker configuration options.
   ///
@@ -232,5 +266,23 @@ class Marker {
     addIfPresent('visible', visible);
     addIfPresent('zIndex', zIndex);
     return json;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Marker &&
+          runtimeType == other.runtimeType &&
+          markerId == other.markerId;
+
+  @override
+  int get hashCode => markerId.hashCode;
+
+  @override
+  String toString() {
+    return 'Marker{markerId: $markerId, alpha: $alpha, anchor: $anchor, '
+        'consumeTapEvents: $consumeTapEvents, draggable: $draggable, flat: $flat, '
+        'icon: $icon, infoWindow: $infoWindow, position: $position, rotation: $rotation, '
+        'visible: $visible, zIndex: $zIndex, onTap: $onTap}';
   }
 }
