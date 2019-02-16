@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:collection/collection.dart';
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 Set<Marker> _toSet({Marker m1, Marker m2, Marker m3}) {
-  final Set<Marker> res = <Marker>{};
+  final Set<Marker> res = Set<Marker>.identity();
   if (m1 != null) {
     res.add(m1);
   }
