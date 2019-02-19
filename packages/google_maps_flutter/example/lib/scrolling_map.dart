@@ -42,17 +42,15 @@ class ScrollingMapBody extends StatelessWidget {
                     width: 300.0,
                     height: 300.0,
                     child: GoogleMap(
-                      onMapCreated: onMapCreated,
                       initialCameraPosition: CameraPosition(
                         target: center,
                         zoom: 11.0,
                       ),
-                      gestureRecognizers:
-                          <Factory<OneSequenceGestureRecognizer>>[
+                      gestureRecognizers: {
                         Factory<OneSequenceGestureRecognizer>(
                           () => EagerGestureRecognizer(),
                         ),
-                      ].toSet(),
+                      },
                     ),
                   ),
                 ),
@@ -76,17 +74,28 @@ class ScrollingMapBody extends StatelessWidget {
                     width: 300.0,
                     height: 300.0,
                     child: GoogleMap(
-                      onMapCreated: onMapCreated,
                       initialCameraPosition: CameraPosition(
                         target: center,
                         zoom: 11.0,
                       ),
-                      gestureRecognizers:
-                          <Factory<OneSequenceGestureRecognizer>>[
+                      markers: {
+                        Marker(
+                          markerId: MarkerId("test_marker_id"),
+                          position: LatLng(
+                            center.latitude,
+                            center.longitude,
+                          ),
+                          infoWindow: const InfoWindow(
+                            title: 'An interesting location',
+                            snippet: '*',
+                          ),
+                        )
+                      },
+                      gestureRecognizers: {
                         Factory<OneSequenceGestureRecognizer>(
                           () => ScaleGestureRecognizer(),
                         ),
-                      ].toSet(),
+                      },
                     ),
                   ),
                 ),
@@ -96,15 +105,5 @@ class ScrollingMapBody extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  void onMapCreated(GoogleMapController controller) {
-    controller.addMarker(MarkerOptions(
-      position: LatLng(
-        center.latitude,
-        center.longitude,
-      ),
-      infoWindowText: const InfoWindowText('An interesting location', '*'),
-    ));
   }
 }
