@@ -232,9 +232,9 @@ class Convert {
       final List<?> anchorData = toList(anchor);
       sink.setAnchor(toFloat(anchorData.get(0)), toFloat(anchorData.get(1)));
     }
-    final Object consumesTapEvents = data.get("consumesTapEvents");
-    if (consumesTapEvents != null) {
-      sink.setConsumeTapEvents(toBoolean(consumesTapEvents));
+    final Object consumeTapEvents = data.get("consumeTapEvents");
+    if (consumeTapEvents != null) {
+      sink.setConsumeTapEvents(toBoolean(consumeTapEvents));
     }
     final Object draggable = data.get("draggable");
     if (draggable != null) {

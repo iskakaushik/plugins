@@ -18,6 +18,7 @@
 - (void)setTrackCameraPosition:(BOOL)enabled;
 - (void)setZoomGesturesEnabled:(BOOL)enabled;
 - (void)setMyLocationEnabled:(BOOL)enabled;
+- (void)updateMarkers:(NSSet<FLTMarkerUpdate*>*)markers;
 @end
 
 // Defines map overlay controllable from Flutter.
@@ -32,9 +33,6 @@
 - (void)animateWithCameraUpdate:(GMSCameraUpdate*)cameraUpdate;
 - (void)moveWithCameraUpdate:(GMSCameraUpdate*)cameraUpdate;
 - (GMSCameraPosition*)cameraPosition;
-- (NSString*)addMarkerWithPosition:(CLLocationCoordinate2D)position;
-- (FLTGoogleMapMarkerController*)markerWithId:(NSString*)markerId;
-- (void)removeMarkerWithId:(NSString*)markerId;
 @end
 
 // Allows the engine to create new Google Map instances.

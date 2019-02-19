@@ -143,11 +143,10 @@ final class GoogleMapController
     return trackCameraPosition ? googleMap.getCameraPosition() : null;
   }
 
-  private void addMarker(
-      MarkerId markerId, MarkerOptions markerOptions, boolean consumesTapEvents) {
+  private void addMarker(MarkerId markerId, MarkerOptions markerOptions, boolean consumeTapEvents) {
     final Marker marker = googleMap.addMarker(markerOptions);
     MarkerController controller =
-        new MarkerController(marker, consumesTapEvents, registrar, markerId);
+        new MarkerController(marker, consumeTapEvents, registrar, markerId);
     markerIdToController.put(markerId, controller);
     googleMapsMarkerIdToDartMarkerId.put(marker.getId(), markerId);
   }
@@ -432,7 +431,7 @@ final class GoogleMapController
     MarkerBuilder markerBuilder = new MarkerBuilder();
     update.sinkChanges(markerBuilder);
     MarkerOptions options = markerBuilder.build();
-    addMarker(markerId, options, markerBuilder.consumesTapEvents());
+    addMarker(markerId, options, markerBuilder.consumeTapEvents());
   }
 
   private boolean hasLocationPermission() {

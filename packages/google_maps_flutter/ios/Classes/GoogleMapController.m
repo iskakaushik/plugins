@@ -3,18 +3,15 @@
 // found in the LICENSE file.
 
 #import "GoogleMapController.h"
+#import "JsonConversions.h"
 
 #pragma mark - Conversion of JSON-like values sent via platform channels. Forward declarations.
 
 static id positionToJson(GMSCameraPosition* position);
-static double toDouble(id json);
-static CLLocationCoordinate2D toLocation(id json);
 static GMSCameraPosition* toOptionalCameraPosition(id json);
 static GMSCoordinateBounds* toOptionalBounds(id json);
 static GMSCameraUpdate* toCameraUpdate(id json);
 static void interpretMapOptions(id json, id<FLTGoogleMapOptionsSink> sink);
-static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> sink,
-                                   NSObject<FlutterPluginRegistrar>* registrar);
 
 @implementation FLTGoogleMapFactory {
   NSObject<FlutterPluginRegistrar>* _registrar;
@@ -45,7 +42,6 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
 @implementation FLTGoogleMapController {
   GMSMapView* _mapView;
   int64_t _viewId;
-  NSMutableDictionary* _markers;
   FlutterMethodChannel* _channel;
   BOOL _trackCameraPosition;
   NSObject<FlutterPluginRegistrar>* _registrar;
@@ -54,6 +50,7 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
   // TODO(cyanglaz): Remove this temporary fix once the Maps SDK issue is resolved.
   // https://github.com/flutter/flutter/issues/27550
   BOOL _cameraDidInitialSetup;
+  NSMutableDictionary<FLTMarkerId*, FLTGoogleMapMarkerController*>* _markerIdToController;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -65,7 +62,6 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
 
     GMSCameraPosition* camera = toOptionalCameraPosition(args[@"initialCameraPosition"]);
     _mapView = [GMSMapView mapWithFrame:frame camera:camera];
-    _markers = [NSMutableDictionary dictionaryWithCapacity:1];
     _trackCameraPosition = NO;
     interpretMapOptions(args[@"options"], self);
     NSString* channelName =
@@ -81,6 +77,7 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
     _mapView.delegate = weakSelf;
     _registrar = registrar;
     _cameraDidInitialSetup = NO;
+    _markerIdToController = [NSMutableDictionary dictionaryWithCapacity:1];
   }
   return self;
 }
@@ -106,18 +103,6 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
     interpretMapOptions(call.arguments[@"options"], self);
     result(positionToJson([self cameraPosition]));
   } else if ([call.method isEqualToString:@"map#waitForMap"]) {
-    result(nil);
-  } else if ([call.method isEqualToString:@"marker#add"]) {
-    NSDictionary* options = call.arguments[@"options"];
-    NSString* markerId = [self addMarkerWithPosition:toLocation(options[@"position"])];
-    interpretMarkerOptions(options, [self markerWithId:markerId], _registrar);
-    result(markerId);
-  } else if ([call.method isEqualToString:@"marker#update"]) {
-    interpretMarkerOptions(call.arguments[@"options"],
-                           [self markerWithId:call.arguments[@"marker"]], _registrar);
-    result(nil);
-  } else if ([call.method isEqualToString:@"marker#remove"]) {
-    [self removeMarkerWithId:call.arguments[@"marker"]];
     result(nil);
   } else {
     result(FlutterMethodNotImplemented);
@@ -150,22 +135,30 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
   }
 }
 
-- (NSString*)addMarkerWithPosition:(CLLocationCoordinate2D)position {
+#pragma mark - FLTGoogleMapController marker mutation methods
+
+- (NSString*)addMarker:(FLTMarkerId*)markerId position:(CLLocationCoordinate2D)position {
   FLTGoogleMapMarkerController* markerController =
-      [[FLTGoogleMapMarkerController alloc] initWithPosition:position mapView:_mapView];
-  _markers[markerController.markerId] = markerController;
+      [[FLTGoogleMapMarkerController alloc] initWithPositionAndId:position
+                                                         markerId:markerId
+                                                          mapView:_mapView
+                                                        registrar:_registrar];
+  _markerIdToController[markerId] = markerController;
   return markerController.markerId;
 }
 
-- (FLTGoogleMapMarkerController*)markerWithId:(NSString*)markerId {
-  return _markers[markerId];
+- (void)removeMarkerWithId:(FLTMarkerId*)markerId {
+  FLTGoogleMapMarkerController* controller = _markerIdToController[markerId];
+  if (controller) {
+    [controller removeMarker];
+    [_markerIdToController removeObjectForKey:markerId];
+  }
 }
 
-- (void)removeMarkerWithId:(NSString*)markerId {
-  FLTGoogleMapMarkerController* markerController = _markers[markerId];
-  if (markerController) {
-    [markerController setVisible:NO];
-    [_markers removeObjectForKey:markerId];
+- (void)updateMarker:(FLTMarkerUpdate*)markerUpdate {
+  FLTGoogleMapMarkerController* controller = _markerIdToController[markerUpdate.markerId];
+  if (controller) {
+    [markerUpdate sinkChanges:controller registrar:_registrar];
   }
 }
 
@@ -215,6 +208,27 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
   _mapView.myLocationEnabled = enabled;
   _mapView.settings.myLocationButton = enabled;
 }
+- (void)updateMarkers:(NSSet<FLTMarkerUpdate*>*)markerUpdates {
+  if (!markerUpdates) {
+    return;
+  }
+  for (FLTMarkerUpdate* markerUpdate in markerUpdates) {
+    FLTMarkerId* markerId = [markerUpdate markerId];
+    FLTMarkerUpdateEventType updateEventType = [markerUpdate updateEventType];
+    switch (updateEventType) {
+      case ADD:
+        [self addMarker:markerId position:markerUpdate.position];
+        [self updateMarker:markerUpdate];
+        break;
+      case REMOVE:
+        [self removeMarkerWithId:markerId];
+        break;
+      case UPDATE:
+        [self updateMarker:markerUpdate];
+        break;
+    }
+  }
+}
 
 #pragma mark - GMSMapViewDelegate methods
 
@@ -244,13 +258,21 @@ static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> si
 
 - (BOOL)mapView:(GMSMapView*)mapView didTapMarker:(GMSMarker*)marker {
   NSString* markerId = marker.userData[0];
-  [_channel invokeMethod:@"marker#onTap" arguments:@{@"marker" : markerId}];
-  return [marker.userData[1] boolValue];
+  FLTMarkerId* dartMarkerId = [[FLTMarkerId alloc] init:markerId];
+  FLTGoogleMapMarkerController* controller = _markerIdToController[dartMarkerId];
+  if (controller) {
+    return [controller onMarkerTap];
+  }
+  return NO;
 }
 
 - (void)mapView:(GMSMapView*)mapView didTapInfoWindowOfMarker:(GMSMarker*)marker {
   NSString* markerId = marker.userData[0];
-  [_channel invokeMethod:@"infoWindow#onTap" arguments:@{@"marker" : markerId}];
+  FLTMarkerId* dartMarkerId = [[FLTMarkerId alloc] init:markerId];
+  FLTGoogleMapMarkerController* controller = _markerIdToController[dartMarkerId];
+  if (controller) {
+    [controller onInfoWindowTap];
+  }
 }
 
 @end
@@ -271,36 +293,6 @@ static id positionToJson(GMSCameraPosition* position) {
     @"bearing" : @([position bearing]),
     @"tilt" : @([position viewingAngle]),
   };
-}
-
-static bool toBool(id json) {
-  NSNumber* data = json;
-  return data.boolValue;
-}
-
-static int toInt(id json) {
-  NSNumber* data = json;
-  return data.intValue;
-}
-
-static double toDouble(id json) {
-  NSNumber* data = json;
-  return data.doubleValue;
-}
-
-static float toFloat(id json) {
-  NSNumber* data = json;
-  return data.floatValue;
-}
-
-static CLLocationCoordinate2D toLocation(id json) {
-  NSArray* data = json;
-  return CLLocationCoordinate2DMake(toDouble(data[0]), toDouble(data[1]));
-}
-
-static CGPoint toPoint(id json) {
-  NSArray* data = json;
-  return CGPointMake(toDouble(data[0]), toDouble(data[1]));
 }
 
 static GMSCameraPosition* toCameraPosition(id json) {
@@ -405,72 +397,14 @@ static void interpretMapOptions(id json, id<FLTGoogleMapOptionsSink> sink) {
   if (myLocationEnabled) {
     [sink setMyLocationEnabled:toBool(myLocationEnabled)];
   }
-}
-
-static void interpretMarkerOptions(id json, id<FLTGoogleMapMarkerOptionsSink> sink,
-                                   NSObject<FlutterPluginRegistrar>* registrar) {
-  NSDictionary* data = json;
-  id alpha = data[@"alpha"];
-  if (alpha) {
-    [sink setAlpha:toFloat(alpha)];
-  }
-  id anchor = data[@"anchor"];
-  if (anchor) {
-    [sink setAnchor:toPoint(anchor)];
-  }
-  id draggable = data[@"draggable"];
-  if (draggable) {
-    [sink setDraggable:toBool(draggable)];
-  }
-  id icon = data[@"icon"];
-  if (icon) {
-    NSArray* iconData = icon;
-    UIImage* image;
-    if ([iconData[0] isEqualToString:@"defaultMarker"]) {
-      CGFloat hue = (iconData.count == 1) ? 0.0f : toDouble(iconData[1]);
-      image = [GMSMarker markerImageWithColor:[UIColor colorWithHue:hue / 360.0
-                                                         saturation:1.0
-                                                         brightness:0.7
-                                                              alpha:1.0]];
-    } else if ([iconData[0] isEqualToString:@"fromAsset"]) {
-      if (iconData.count == 2) {
-        image = [UIImage imageNamed:[registrar lookupKeyForAsset:iconData[1]]];
-      } else {
-        image = [UIImage imageNamed:[registrar lookupKeyForAsset:iconData[1]
-                                                     fromPackage:iconData[2]]];
-      }
+  id markerUpdates = data[@"markerUpdates"];
+  if (markerUpdates) {
+    NSArray* markerUpdatesArray = markerUpdates;
+    NSMutableSet* markerUpdatesSet = [[NSMutableSet alloc] init];
+    for (id markerUpdateRaw in markerUpdatesArray) {
+      FLTMarkerUpdate* markerUpdate = [[FLTMarkerUpdate alloc] initWithJson:markerUpdateRaw];
+      [markerUpdatesSet addObject:markerUpdate];
     }
-    [sink setIcon:image];
-  }
-  id flat = data[@"flat"];
-  if (flat) {
-    [sink setFlat:toBool(flat)];
-  }
-  id infoWindowAnchor = data[@"infoWindowAnchor"];
-  if (infoWindowAnchor) {
-    [sink setInfoWindowAnchor:toPoint(infoWindowAnchor)];
-  }
-  id infoWindowText = data[@"infoWindowText"];
-  if (infoWindowText) {
-    NSArray* infoWindowTextData = infoWindowText;
-    NSString* title = (infoWindowTextData[0] == [NSNull null]) ? nil : infoWindowTextData[0];
-    NSString* snippet = (infoWindowTextData[1] == [NSNull null]) ? nil : infoWindowTextData[1];
-    [sink setInfoWindowTitle:title snippet:snippet];
-  }
-  id position = data[@"position"];
-  if (position) {
-    [sink setPosition:toLocation(position)];
-  }
-  id rotation = data[@"rotation"];
-  if (rotation) {
-    [sink setRotation:toDouble(rotation)];
-  }
-  id visible = data[@"visible"];
-  if (visible) {
-    [sink setVisible:toBool(visible)];
-  }
-  id zIndex = data[@"zIndex"];
-  if (zIndex) {
-    [sink setZIndex:toInt(zIndex)];
+    [sink updateMarkers:markerUpdatesSet];
   }
 }

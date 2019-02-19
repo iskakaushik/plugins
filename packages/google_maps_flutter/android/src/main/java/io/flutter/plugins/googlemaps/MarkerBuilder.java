@@ -10,7 +10,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 
 class MarkerBuilder implements MarkerOptionsSink {
   private final MarkerOptions markerOptions;
-  private boolean consumesTapEvents;
+  private boolean consumeTapEvents;
 
   MarkerBuilder() {
     this.markerOptions = new MarkerOptions();
@@ -20,8 +20,8 @@ class MarkerBuilder implements MarkerOptionsSink {
     return markerOptions;
   }
 
-  public boolean consumesTapEvents() {
-    return consumesTapEvents;
+  public boolean consumeTapEvents() {
+    return consumeTapEvents;
   }
 
   @Override
@@ -35,8 +35,8 @@ class MarkerBuilder implements MarkerOptionsSink {
   }
 
   @Override
-  public void setConsumeTapEvents(boolean consumesTapEvents) {
-    this.consumesTapEvents = consumesTapEvents;
+  public void setConsumeTapEvents(boolean consumeTapEvents) {
+    this.consumeTapEvents = consumeTapEvents;
   }
 
   @Override
