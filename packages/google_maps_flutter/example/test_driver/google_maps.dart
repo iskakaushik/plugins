@@ -12,8 +12,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'google_map_inspector.dart';
 import 'test_widgets.dart';
 
+const LatLng _kInitialMapCenter = LatLng(0, 0);
 const CameraPosition _kInitialCameraPosition =
-    CameraPosition(target: LatLng(0, 0));
+    CameraPosition(target: _kInitialMapCenter);
 
 void main() {
   final Completer<String> allTestsCompleter = Completer<String>();
@@ -83,8 +84,18 @@ void main() {
     expect(firstVisibleRegion.southwest, isNotNull);
     expect(firstVisibleRegion.northeast, isNotNull);
     expect(firstVisibleRegion, isNot(zeroLatLngBounds));
+    expect(firstVisibleRegion.contains(_kInitialMapCenter), isTrue);
 
-    await mapController.moveCamera(CameraUpdate.scrollBy(100, 100));
+    const LatLng southWest = LatLng(85, 73);
+    const LatLng northEast = LatLng(87, 75);
+
+    expect(firstVisibleRegion.contains(northEast), isFalse);
+    expect(firstVisibleRegion.contains(southWest), isFalse);
+
+    final LatLngBounds latLngBounds =
+        LatLngBounds(southwest: southWest, northeast: northEast);
+    await mapController
+        .moveCamera(CameraUpdate.newLatLngBounds(latLngBounds, 0));
 
     final LatLngBounds secondVisibleRegion =
         await mapController.getVisibleRegion();
@@ -95,5 +106,7 @@ void main() {
     expect(secondVisibleRegion, isNot(zeroLatLngBounds));
 
     expect(firstVisibleRegion, isNot(secondVisibleRegion));
+    expect(firstVisibleRegion.contains(southWest), isTrue);
+    expect(firstVisibleRegion.contains(northEast), isTrue);
   });
 }
